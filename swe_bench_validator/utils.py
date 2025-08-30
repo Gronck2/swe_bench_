@@ -34,7 +34,7 @@ def load_data_point(file_path: Union[str, Path]) -> Dict[str, Any]:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        raise json.JSONDecodeError(f"Invalid JSON in {file_path}: {e}")
+        raise ValueError(f"Invalid JSON in {file_path}: {e}")
     
     # Validate required fields according to SWE-bench format
     required_fields = [

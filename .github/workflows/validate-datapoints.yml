@@ -1,0 +1,250 @@
+name: Validate SWE-bench Data Points
+
+# 3.1 Настройка триггеров согласно плану
+on:
+  push:
+    paths:
+      - 'data_points/**'
+  pull_request:
+    paths:
+      - 'data_points/**'
+
+jobs:
+  validate-datapoints:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Need previous commit to detect changes
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install UV
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+    
+    - name: Install Docker
+      uses: docker/setup-buildx-action@v3
+    
+    # 3.2 Кэширование Docker образов и зависимостей
+    - name: Cache Docker images
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-buildx-
+    
+    - name: Install dependencies
+      run: |
+        uv sync --all-extras
+    
+    # 3.2 Детекция изменений - только измененные/новые файлы
+    - name: Detect changed data point files
+      id: changed-files
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          # For PR, compare against base branch
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'data_points/*.json' || echo "")
+        else
+          # For push, compare against previous commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'data_points/*.json' || echo "")
+        fi
+        
+        # Filter for existing files only
+        EXISTING_FILES=""
+        if [[ -n "$CHANGED_FILES" ]]; then
+          for file in $CHANGED_FILES; do
+            if [[ -f "$file" ]]; then
+              EXISTING_FILES="$EXISTING_FILES $file"
+            fi
+          done
+        fi
+        
+        echo "changed_files=$EXISTING_FILES" >> $GITHUB_OUTPUT
+        echo "file_count=$(echo $EXISTING_FILES | wc -w)" >> $GITHUB_OUTPUT
+        
+        echo "🔍 Changed data point files:"
+        if [[ -n "$EXISTING_FILES" ]]; then
+          for file in $EXISTING_FILES; do
+            echo "  📄 $file"
+          done
+        else
+          echo "  ℹ️ No changed data point files found"
+        fi
+    
+    # Validate changed data points using our validator
+    - name: Validate changed data points
+      if: steps.changed-files.outputs.file_count > 0
+      id: validation
+      run: |
+        echo "🧪 Validating ${{ steps.changed-files.outputs.file_count }} changed data point files"
+        
+        # Create results directory
+        mkdir -p validation_results
+        
+        # Get changed files
+        CHANGED_FILES="${{ steps.changed-files.outputs.changed_files }}"
+        
+        # Initialize counters
+        TOTAL=0
+        PASSED=0
+        FAILED=0
+        
+        # Validate each file individually to get detailed results
+        for file in $CHANGED_FILES; do
+          echo ""
+          echo "📋 Validating: $file"
+          TOTAL=$((TOTAL + 1))
+          
+          # Create individual result file name
+          RESULT_FILE="validation_results/$(basename "$file" .json)_result.json"
+          
+          # Run validation and capture output
+          if uv run swe-bench-validator validate-file "$file" 2>&1 | tee "validation_results/$(basename "$file" .json)_output.log"; then
+            echo "✅ PASSED: $file"
+            PASSED=$((PASSED + 1))
+            echo '{"status": "PASSED", "file": "'$file'", "error": null}' > "$RESULT_FILE"
+          else
+            echo "❌ FAILED: $file"
+            FAILED=$((FAILED + 1))
+            # Extract error message from output
+            ERROR_MSG=$(tail -10 "validation_results/$(basename "$file" .json)_output.log" | grep "Error:" | head -1 || echo "Validation failed")
+            echo '{"status": "FAILED", "file": "'$file'", "error": "'"$ERROR_MSG"'"}' > "$RESULT_FILE"
+          fi
+        done
+        
+        # Set outputs for later steps
+        echo "total=$TOTAL" >> $GITHUB_OUTPUT
+        echo "passed=$PASSED" >> $GITHUB_OUTPUT
+        echo "failed=$FAILED" >> $GITHUB_OUTPUT
+        echo "success_rate=$(( PASSED * 100 / TOTAL ))" >> $GITHUB_OUTPUT
+        
+        # Create summary report
+        echo "## 🧪 SWE-bench Data Point Validation Results" > validation_summary.md
+        echo "" >> validation_summary.md
+        echo "### 📊 Summary" >> validation_summary.md
+        echo "- **Total files validated:** $TOTAL" >> validation_summary.md
+        echo "- **Passed:** $PASSED ✅" >> validation_summary.md
+        echo "- **Failed:** $FAILED ❌" >> validation_summary.md
+        echo "- **Success rate:** $(( PASSED * 100 / TOTAL ))%" >> validation_summary.md
+        echo "" >> validation_summary.md
+        
+        # Add detailed results
+        echo "### 📋 Detailed Results" >> validation_summary.md
+        echo "" >> validation_summary.md
+        
+        for file in $CHANGED_FILES; do
+          RESULT_FILE="validation_results/$(basename "$file" .json)_result.json"
+          if [[ -f "$RESULT_FILE" ]]; then
+            STATUS=$(python3 -c "import json; data=json.load(open('$RESULT_FILE')); print(data['status'])")
+            if [[ "$STATUS" == "PASSED" ]]; then
+              echo "✅ **$file**: PASSED" >> validation_summary.md
+            else
+              echo "❌ **$file**: FAILED" >> validation_summary.md
+              ERROR=$(python3 -c "import json; data=json.load(open('$RESULT_FILE')); print(data.get('error', 'Unknown error'))")
+              echo "   - Error: $ERROR" >> validation_summary.md
+            fi
+          else
+            echo "❓ **$file**: No result available" >> validation_summary.md
+          fi
+        done
+        
+        echo "" >> validation_summary.md
+        echo "---" >> validation_summary.md
+        echo "*Validation performed using SWE-bench evaluation harness with Docker containers*" >> validation_summary.md
+        
+        # Exit with error if any validation failed
+        if [[ $FAILED -gt 0 ]]; then
+          echo "❌ Validation failed for $FAILED file(s)"
+          exit 1
+        else
+          echo "✅ All validations passed!"
+        fi
+    
+    # 3.3 Детальные логи - загрузка артефактов
+    - name: Upload validation results
+      if: always() && steps.changed-files.outputs.file_count > 0
+      uses: actions/upload-artifact@v3
+      with:
+        name: validation-results
+        path: |
+          validation_results/
+          validation_summary.md
+        retention-days: 30
+    
+    # 3.3 Комментарии в PR - автоматические комментарии с результатами
+    - name: Comment PR with validation results
+      if: github.event_name == 'pull_request' && steps.changed-files.outputs.file_count > 0
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read validation summary
+          let summary = '';
+          try {
+            summary = fs.readFileSync('validation_summary.md', 'utf8');
+          } catch (error) {
+            summary = '❌ Failed to read validation summary';
+          }
+          
+          // Create comment body
+          const body = `
+${summary}
+
+<details>
+<summary>🔧 Technical Details</summary>
+
+**Validation Process:**
+1. Uses official SWE-bench evaluation harness
+2. Runs tests in isolated Docker containers  
+3. Validates that FAIL_TO_PASS tests pass after patch application
+4. Ensures PASS_TO_PASS tests continue to work
+
+**Resources:**
+- Docker containers with full repository environment
+- Real test execution (not simulation)
+- Timeout: 30+ minutes per data point
+
+</details>
+
+---
+*This comment was automatically generated by the SWE-bench Data Point Validator*
+          `.trim();
+          
+          // Post comment
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
+    
+    # 3.3 Status checks - зеленые/красные статусы для PR
+    - name: Set validation status check
+      if: always() && steps.changed-files.outputs.file_count > 0
+      run: |
+        if [[ "${{ steps.validation.outcome }}" == "success" ]]; then
+          echo "✅ All SWE-bench data point validations passed"
+          echo "status=success" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Some SWE-bench data point validations failed"
+          echo "status=failure" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+    
+    # Handle case when no changes detected
+    - name: No changes detected
+      if: steps.changed-files.outputs.file_count == 0
+      run: |
+        echo "ℹ️ No changed data point files detected - skipping validation"
+        echo "This is normal when changes don't affect data_points/ directory"
