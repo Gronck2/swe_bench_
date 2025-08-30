@@ -14,6 +14,7 @@ dependencies = [
     "click>=8.0.0",
     "rich>=12.0.0",
     "swebench>=4.0.4",
+    "docker>=6.0.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -27,6 +28,9 @@ dev = [
     "isort>=5.10.0",
     "flake8>=5.0.0",
 ]
+
+[project.scripts]
+swe-bench-validator = "swe_bench_validator.cli:main"
 
 [tool.black]
 line-length = 88
