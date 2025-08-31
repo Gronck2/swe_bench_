@@ -6,7 +6,7 @@ import json
 import sys
 
 def extract_error(result_file):
-    """Extract error message with smart truncation."""
+    """Extract error message with simple, readable formatting."""
     try:
         with open(result_file) as f:
             data = json.load(f)
@@ -17,34 +17,42 @@ def extract_error(result_file):
             
             error = error.strip()
             
-            # Cut at logical breakpoints for better readability
-            breakpoints = [
-                'Solution:',           # Cut before solution section
-                'Technical details:',  # Cut before technical details  
-                'Original error:',     # Cut before original error
-            ]
+            # Create simple, readable error messages
+            if 'not found in SWE-bench dataset' in error:
+                return 'Instance ID not found in SWE-bench dataset'
             
-            for bp in breakpoints:
-                if bp in error:
-                    result = error.split(bp)[0].strip()
-                    return result
+            elif 'Missing required fields' in error:
+                # Extract which fields are missing
+                if "['patch']" in error:
+                    return 'Missing required field: patch'
+                elif 'Missing required fields:' in error:
+                    import re
+                    match = re.search(r"Missing required fields: (\[.*?\])", error)
+                    if match:
+                        fields = match.group(1)
+                        return f'Missing required fields: {fields}'
+                return 'Missing required fields'
             
-            # Special handling for "This error occurs when:" - include explanation
-            if 'This error occurs when:' in error:
-                parts = error.split('This error occurs when:')
-                main_error = parts[0].strip()
-                explanation = parts[1].split('Solution:')[0].strip()
-                return f"{main_error} This error occurs when: {explanation}"
+            elif 'Patch did not resolve the issue' in error:
+                return 'Patch did not resolve the issue (tests still failing)'
             
-            # No breakpoint found, use first line only
-            first_line = error.split('\n')[0]
-            if len(first_line) <= 120:
-                return first_line
+            elif 'timeout' in error.lower():
+                return 'Validation timed out'
+            
+            elif 'docker' in error.lower():
+                return 'Docker execution error'
+            
             else:
-                return first_line[:120] + '...'
+                # Fallback: use first sentence or line
+                first_line = error.split('\n')[0]
+                if '. ' in first_line:
+                    first_sentence = first_line.split('. ')[0] + '.'
+                    return first_sentence if len(first_sentence) <= 100 else first_line[:80] + '...'
+                else:
+                    return first_line[:80] + ('...' if len(first_line) > 80 else '')
                 
     except Exception as e:
-        return f'Error reading result file: {e}'
+        return f'Error reading result file'
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
