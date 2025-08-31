@@ -1,8 +1,9 @@
 name: Validate SWE-bench Data Points
 
-# 3.1 Настройка триггеров согласно плану
+# 3.1 Настройка триггеров согласно заданию
 on:
   push:
+    branches: [main]  # Only on main branch to avoid duplication with PR
     paths:
       - 'data_points/**'
   pull_request:
@@ -20,7 +21,7 @@ jobs:
         fetch-depth: 2  # Need previous commit to detect changes
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
     
@@ -34,7 +35,7 @@ jobs:
     
     # 3.2 Кэширование Docker образов и зависимостей
     - name: Cache Docker images
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: /tmp/.buildx-cache
         key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -46,6 +47,10 @@ jobs:
         uv sync --all-extras
     
     # 3.2 Детекция изменений - только измененные/новые файлы
+    # Логика триггеров:
+    # - push to main: валидация при прямых коммитах в main
+    # - pull_request: валидация при создании/обновлении PR
+    # - push ограничен main веткой чтобы избежать дублирования с PR
     - name: Detect changed data point files
       id: changed-files
       run: |
@@ -54,9 +59,11 @@ jobs:
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
           CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'data_points/*.json' || echo "")
+          echo "🔍 PR validation: comparing $HEAD_SHA against $BASE_SHA"
         else
-          # For push, compare against previous commit
+          # For push to main, compare against previous commit
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- 'data_points/*.json' || echo "")
+          echo "🔍 Push validation: comparing HEAD against HEAD~1"
         fi
         
         # Filter for existing files only
@@ -173,7 +180,7 @@ jobs:
     # 3.3 Детальные логи - загрузка артефактов
     - name: Upload validation results
       if: always() && steps.changed-files.outputs.file_count > 0
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: validation-results
         path: |
