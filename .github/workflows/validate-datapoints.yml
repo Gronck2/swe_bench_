@@ -39,6 +39,9 @@ jobs:
     
     - name: Install Docker
       uses: docker/setup-buildx-action@v3
+      
+    # Note: SWE-bench evaluation harness will use official Docker images from DockerHub
+    # when available, or build them locally if needed
     
     # 3.2 Кэширование Docker образов и зависимостей
     - name: Cache Docker images
@@ -122,17 +125,29 @@ jobs:
           # Create individual result file name
           RESULT_FILE="validation_results/$(basename "$file" .json)_result.json"
           
-          # Run validation and capture output
-          if uv run swe-bench-validator validate-file "$file" 2>&1 | tee "validation_results/$(basename "$file" .json)_output.log"; then
+          # Run validation and capture output with proper exit code handling
+          OUTPUT_LOG="validation_results/$(basename "$file" .json)_output.log"
+          
+          # Run validation and capture both output and exit code
+          set +e  # Temporarily allow command to fail
+          uv run swe-bench-validator validate-file "$file" > "$OUTPUT_LOG" 2>&1
+          VALIDATION_EXIT_CODE=$?
+          set -e  # Re-enable exit on error
+          
+          # Display output
+          cat "$OUTPUT_LOG"
+          
+          # Check result based on exit code
+          if [[ $VALIDATION_EXIT_CODE -eq 0 ]]; then
             echo "✅ PASSED: $file"
             PASSED=$((PASSED + 1))
             echo '{"status": "PASSED", "file": "'$file'", "error": null}' > "$RESULT_FILE"
           else
-            echo "❌ FAILED: $file"
+            echo "❌ FAILED: $file (exit code: $VALIDATION_EXIT_CODE)"
             FAILED=$((FAILED + 1))
             # Extract error message from output
-            ERROR_MSG=$(tail -10 "validation_results/$(basename "$file" .json)_output.log" | grep "Error:" | head -1 || echo "Validation failed")
-            echo '{"status": "FAILED", "file": "'$file'", "error": "'"$ERROR_MSG"'"}' > "$RESULT_FILE"
+            ERROR_MSG=$(tail -10 "$OUTPUT_LOG" | grep "Error:" | head -1 || echo "Validation failed")
+            echo '{"status": "FAILED", "file": "'$file'", "error": "'"$ERROR_MSG"'", "exit_code": '$VALIDATION_EXIT_CODE'}' > "$RESULT_FILE"
           fi
         done
         
