@@ -102,6 +102,7 @@ jobs:
     - name: Validate changed data points
       if: steps.changed-files.outputs.file_count > 0
       id: validation
+      continue-on-error: true  # Don't stop workflow on validation failures
       run: |
         echo "🧪 Validating ${{ steps.changed-files.outputs.file_count }} changed data point files"
         
@@ -191,12 +192,13 @@ jobs:
         echo "---" >> validation_summary.md
         echo "*Validation performed using SWE-bench evaluation harness with Docker containers*" >> validation_summary.md
         
-        # Exit with error if any validation failed
+        # Set final result but don't exit here - let other steps run
         if [[ $FAILED -gt 0 ]]; then
           echo "❌ Validation failed for $FAILED file(s)"
-          exit 1
+          echo "validation_failed=true" >> $GITHUB_OUTPUT
         else
           echo "✅ All validations passed!"
+          echo "validation_failed=false" >> $GITHUB_OUTPUT
         fi
     
     # 3.3 Детальные логи - загрузка артефактов
@@ -263,13 +265,13 @@ jobs:
     - name: Set validation status check
       if: always() && steps.changed-files.outputs.file_count > 0
       run: |
-        if [[ "${{ steps.validation.outcome }}" == "success" ]]; then
-          echo "✅ All SWE-bench data point validations passed"
-          echo "status=success" >> $GITHUB_OUTPUT
-        else
+        if [[ "${{ steps.validation.outputs.validation_failed }}" == "true" ]]; then
           echo "❌ Some SWE-bench data point validations failed"
           echo "status=failure" >> $GITHUB_OUTPUT
           exit 1
+        else
+          echo "✅ All SWE-bench data point validations passed"
+          echo "status=success" >> $GITHUB_OUTPUT
         fi
     
     # Handle case when no changes detected
