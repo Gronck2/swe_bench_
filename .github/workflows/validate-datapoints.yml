@@ -184,8 +184,8 @@ jobs:
               echo "✅ **$file**: PASSED" >> validation_summary.md
             else
               echo "❌ **$file**: FAILED" >> validation_summary.md
-              # Improved error extraction with fallback
-              ERROR=$(python3 -c "import json; f=open('$RESULT_FILE'); data=json.load(f); error=data.get('error','Unknown error'); print(error.strip()[:200] if error and error.strip() else 'Validation failed')" 2>/dev/null || echo "Check validation logs for details")
+              # Extract error using helper script
+              ERROR=$(python3 scripts/extract_error.py "$RESULT_FILE" 2>/dev/null || echo "Check validation logs for details")
               echo "   - Error: $ERROR" >> validation_summary.md
             fi
           else
