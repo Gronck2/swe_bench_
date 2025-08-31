@@ -146,8 +146,12 @@ jobs:
           else
             echo "❌ FAILED: $file (exit code: $VALIDATION_EXIT_CODE)"
             FAILED=$((FAILED + 1))
-            # Extract error message from output
-            ERROR_MSG=$(tail -10 "$OUTPUT_LOG" | grep "Error:" | head -1 || echo "Validation failed")
+            # Extract error message from output - improved extraction
+            ERROR_MSG=$(grep -A 5 "Error:" "$OUTPUT_LOG" | head -10 | tr '\n' ' ' || echo "Validation failed - check logs for details")
+            # If no "Error:" found, get the last meaningful line
+            if [[ "$ERROR_MSG" == "Validation failed - check logs for details" ]]; then
+              ERROR_MSG=$(tail -5 "$OUTPUT_LOG" | grep -v "^$" | tail -1 || echo "Validation failed")
+            fi
             echo '{"status": "FAILED", "file": "'$file'", "error": "'"$ERROR_MSG"'", "exit_code": '$VALIDATION_EXIT_CODE'}' > "$RESULT_FILE"
           fi
         done
@@ -175,12 +179,13 @@ jobs:
         for file in $CHANGED_FILES; do
           RESULT_FILE="validation_results/$(basename "$file" .json)_result.json"
           if [[ -f "$RESULT_FILE" ]]; then
-            STATUS=$(python3 -c "import json; data=json.load(open('$RESULT_FILE')); print(data['status'])")
+            STATUS=$(python3 -c "import json; data=json.load(open('$RESULT_FILE')); print(data['status'])" 2>/dev/null || echo "UNKNOWN")
             if [[ "$STATUS" == "PASSED" ]]; then
               echo "✅ **$file**: PASSED" >> validation_summary.md
             else
               echo "❌ **$file**: FAILED" >> validation_summary.md
-              ERROR=$(python3 -c "import json; data=json.load(open('$RESULT_FILE')); print(data.get('error', 'Unknown error'))")
+              # Improved error extraction with fallback
+              ERROR=$(python3 -c "import json; f=open('$RESULT_FILE'); data=json.load(f); error=data.get('error','Unknown error'); print(error.strip()[:200] if error and error.strip() else 'Validation failed')" 2>/dev/null || echo "Check validation logs for details")
               echo "   - Error: $ERROR" >> validation_summary.md
             fi
           else
