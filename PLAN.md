@@ -1,160 +1,160 @@
-# Подробный план решения задачи SWE-bench Data Point Validator
+# Detailed Implementation Plan for SWE-bench Data Point Validator
 
-## Обзор задачи
+## Task Overview
 
-Необходимо создать систему валидации для SWE-bench data points, которая будет проверять корректность исправлений (patches) с использованием официального evaluation harness SWE-bench. Система должна интегрироваться с GitHub Actions для автоматической валидации при изменениях в папке `data_points/`.
+Need to create a validation system for SWE-bench data points that will verify the correctness of patches using the official SWE-bench evaluation harness. The system must integrate with GitHub Actions for automatic validation when changes occur in the `data_points/` folder.
 
-## Этап 1: Документация SWE-bench Docker архитектуры
+## Stage 1: SWE-bench Docker Architecture Documentation
 
-### 1.1 Исследование Docker архитектуры
-- [x] Изучить официальную документацию SWE-bench по Docker
-- [x] Проанализировать 3-слойную систему Docker образов:
-  - Base images (базовые образы с системными зависимостями)
-  - Environment images (образы с зависимостями проектов)  
-  - Instance images (образы для конкретных тестовых случаев)
-- [x] Понять процесс построения образов и установки зависимостей
+### 1.1 Docker Architecture Research
+- [x] Study official SWE-bench Docker documentation
+- [x] Analyze 3-layer Docker image system:
+  - Base images (base images with system dependencies)
+  - Environment images (images with project dependencies)  
+  - Instance images (images for specific test cases)
+- [x] Understand image building process and dependency installation
 
-### 1.2 Создание документации
-- [x] Создать файл `swe-bench-docker-architecture.md`
-- [x] Описать архитектуру Docker системы
-- [x] Документировать процесс выполнения тестов
-- [x] Добавить конкретные примеры выполнения
-- [x] Описать интеграционные точки с валидатором
+### 1.2 Documentation Creation
+- [x] Create `swe-bench-docker-architecture.md` file
+- [x] Describe Docker system architecture
+- [x] Document test execution process
+- [x] Add concrete execution examples
+- [x] Describe integration points with validator
 
-**Deliverable**: `swe-bench-docker-architecture.md` (100-300 строк)
+**Deliverable**: `swe-bench-docker-architecture.md` (100-300 lines)
 
-## Этап 2: Реализация валидатора SWE-bench
+## Stage 2: SWE-bench Validator Implementation
 
-### 2.1 Архитектура валидатора
-- [x] Создать модуль `swe_bench_validator/`
-- [x] Структура модулей:
-  - `__init__.py` - публичный API
-  - `validator.py` - основная логика валидации
-  - `cli.py` - интерфейс командной строки
-  - `utils.py` - вспомогательные функции
-  - `config.py` - конфигурация валидации
+### 2.1 Validator Architecture
+- [x] Create `swe_bench_validator/` module
+- [x] Module structure:
+  - `__init__.py` - public API
+  - `validator.py` - main validation logic
+  - `cli.py` - command line interface
+  - `utils.py` - utility functions
+  - `config.py` - validation configuration
 
-### 2.2 Основная функциональность
-- [x] **Загрузка data points**: Чтение JSON файлов из папки `data_points/`
-- [x] **Преобразование в формат предсказаний**: Конвертация в формат SWE-bench predictions
-- [x] **Запуск evaluation harness**: Использование `swebench.harness.run_evaluation`
-- [x] **Валидация результатов**: Проверка что тесты `FAIL_TO_PASS` и `PASS_TO_PASS` проходят
+### 2.2 Core Functionality
+- [x] **Data points loading**: Reading JSON files from `data_points/` folder
+- [x] **Prediction format conversion**: Converting to SWE-bench predictions format
+- [x] **Evaluation harness execution**: Using `swebench.harness.run_evaluation`
+- [x] **Results validation**: Checking that `FAIL_TO_PASS` and `PASS_TO_PASS` tests pass
 
-### 2.3 Обработка ошибок и таймауты
-- [x] **Структурные ошибки**: Некорректный JSON, отсутствующие поля
-- [x] **Ошибки выполнения**: Docker ошибки, сбои тестов
-- [x] **Таймауты**: Настраиваемые таймауты для разных типов data points
-- [x] **Детальные сообщения об ошибках**: Понятные и действенные сообщения
+### 2.3 Error Handling and Timeouts
+- [x] **Structural errors**: Invalid JSON, missing fields
+- [x] **Execution errors**: Docker errors, test failures
+- [x] **Timeouts**: Configurable timeouts for different data point types
+- [x] **Detailed error messages**: Clear and actionable messages
 
-### 2.4 CLI интерфейс
-- [x] Команда валидации конкретного файла
-- [x] Команда валидации всей папки
-- [x] Команда валидации только измененных файлов
-- [x] Опции для настройки таймаутов и уровня детализации
+### 2.4 CLI Interface
+- [x] Command for validating specific file
+- [x] Command for validating entire folder
+- [x] Command for validating only changed files
+- [x] Options for configuring timeouts and detail level
 
-**Deliverable**: Рабочий Python валидатор с CLI интерфейсом
+**Deliverable**: Working Python validator with CLI interface
 
-## Этап 3: GitHub Action workflow
+## Stage 3: GitHub Action Workflow
 
-### 3.1 Создание workflow файла
-- [x] Создать `.github/workflows/validate-datapoints.yml`
-- [x] Настроить триггеры:
-  - Push в `data_points/**`
-  - Pull requests затрагивающие `data_points/**`
+### 3.1 Workflow File Creation
+- [x] Create `.github/workflows/validate-datapoints.yml`
+- [x] Configure triggers:
+  - Push to `data_points/**`
+  - Pull requests affecting `data_points/**`
 
-### 3.2 Оптимизация производительности
-- [x] **Детекция изменений**: Определение только измененных/новых файлов
-- [x] **Параллельная валидация**: Если возможно, валидировать файлы параллельно
-- [x] **Кэширование**: Кэширование Docker образов и зависимостей
+### 3.2 Performance Optimization
+- [x] **Change detection**: Identifying only changed/new files
+- [x] **Parallel validation**: If possible, validate files in parallel
+- [x] **Caching**: Caching Docker images and dependencies
 
-### 3.3 Отчетность и статусы
-- [x] **Status checks**: Зеленые/красные статусы для PR
-- [x] **Детальные логи**: Подробная информация об ошибках
-- [x] **Комментарии в PR**: Автоматические комментарии с результатами
+### 3.3 Reporting and Status
+- [x] **Status checks**: Green/red status for PR
+- [x] **Detailed logs**: Comprehensive error information
+- [x] **PR comments**: Automatic comments with results
 
 **Deliverable**: `.github/workflows/validate-datapoints.yml`
 
-## Этап 4: Интеграция с проектом
+## Stage 4: Project Integration
 
-### 4.1 Обновление конфигурации проекта
-- [x] Добавить зависимости валидатора в `pyproject.toml`
-- [x] Обновить структуру пакетов в `setuptools.packages.find`
-- [x] Добавить dev зависимости для тестирования
+### 4.1 Project Configuration Updates
+- [x] Add validator dependencies to `pyproject.toml`
+- [x] Update package structure in `setuptools.packages.find`
+- [x] Add dev dependencies for testing
 
-### 4.2 Документация пользователя
-- [x] Обновить `README.md` с инструкциями по использованию
-- [x] Добавить примеры использования валидатора
-- [x] Документировать процесс добавления новых data points
+### 4.2 User Documentation
+- [x] Update `README.md` with usage instructions
+- [x] Add validator usage examples
+- [x] Document process for adding new data points
 
-**Deliverable**: Обновленная конфигурация проекта и документация
+**Deliverable**: Updated project configuration and documentation
 
-## Этап 5: Тестирование и демонстрация
+## Stage 5: Testing and Demonstration
 
-### 5.1 Локальное тестирование
-- [x] Протестировать валидатор на существующих data points
-- [x] Убедиться что валидная точка (`astropy__astropy-11693.json`) проходит валидацию
-- [x] Убедиться что невалидная точка (`astropy__astropy-11693-fail.json`) не проходит валидацию
+### 5.1 Local Testing
+- [x] Test validator on existing data points
+- [x] Ensure valid point (`astropy__astropy-11693.json`) passes validation
+- [x] Ensure invalid point (`astropy__astropy-11693-fail.json`) fails validation
 
-### 5.2 Создание публичного репозитория
-- [x] Создать новый публичный репозиторий с реализацией
-- [x] Перенести весь код и конфигурацию
-- [x] Настроить GitHub Actions в новом репозитории
+### 5.2 Public Repository Creation
+- [x] Create new public repository with implementation
+- [x] Transfer all code and configuration
+- [x] Set up GitHub Actions in new repository
 
-### 5.3 Создание тестовых Pull Requests
-- [ ] **PR #1 (валидный)**: 
-  - Добавить валидную data point
-  - Показать зеленые status checks
-  - Продемонстрировать успешную валидацию
-- [ ] **PR #2 (невалидный)**:
-  - Добавить невалидную data point  
-  - Показать красные status checks
-  - Продемонстрировать четкие сообщения об ошибках
+### 5.3 Test Pull Requests Creation
+- [x] **PR #1 (valid)**: 
+  - Add valid data point
+  - Show green status checks
+  - Demonstrate successful validation
+- [x] **PR #2 (invalid)**:
+  - Add invalid data point  
+  - Show red status checks
+  - Demonstrate clear error messages
 
-**Deliverable**: Публичный репозиторий с двумя демонстрационными PR
+**Deliverable**: Public repository with two demonstration PRs
 
-## Технические требования
+## Technical Requirements
 
-### Языки и инструменты
-- **Python 3.10+** с UV package manager
-- **SWE-bench library** для evaluation harness
-- **Docker** для выполнения тестов
-- **GitHub Actions** для CI/CD
+### Languages and Tools
+- **Python 3.10+** with UV package manager
+- **SWE-bench library** for evaluation harness
+- **Docker** for test execution
+- **GitHub Actions** for CI/CD
 
-### Зависимости
-- `swebench>=4.0.4` - официальная библиотека SWE-bench
-- `click` - для CLI интерфейса
-- `rich` - для красивого вывода
-- `pytest` - для тестирования (dev зависимость)
+### Dependencies
+- `swebench>=4.0.4` - official SWE-bench library
+- `click` - for CLI interface
+- `rich` - for beautiful output
+- `pytest` - for testing (dev dependency)
 
-### Производительность и надежность
-- **Таймауты**: Настраиваемые таймауты для предотвращения зависания
-- **Обработка ошибок**: Graceful handling Docker ошибок и сбоев тестов
-- **Оптимизация**: Валидация только измененных файлов в CI/CD
+### Performance and Reliability
+- **Timeouts**: Configurable timeouts to prevent hanging
+- **Error Handling**: Graceful handling of Docker errors and test failures
+- **Optimization**: Validation of only changed files in CI/CD
 
-## Критерии успеха
+## Success Criteria
 
-1. **Документация**: Полная и понятная документация Docker архитектуры
-2. **Функциональность**: Валидатор корректно определяет валидные и невалидные data points
-3. **Интеграция**: GitHub Action работает автоматически при изменениях
-4. **Демонстрация**: Два PR показывают работу системы в реальных условиях
-5. **Качество кода**: Чистый, хорошо структурированный и документированный код
+1. **Documentation**: Complete and clear Docker architecture documentation
+2. **Functionality**: Validator correctly identifies valid and invalid data points
+3. **Integration**: GitHub Action works automatically on changes
+4. **Demonstration**: Two PRs show system working in real conditions
+5. **Code Quality**: Clean, well-structured and documented code
 
-## Временные оценки
+## Time Estimates
 
-- **Этап 1** (Документация): 1.5 часа
-- **Этап 2** (Валидатор): 2.5 часа  
-- **Этап 3** (GitHub Action): 1 час
-- **Этап 4** (Интеграция): 0.5 часа
-- **Этап 5** (Тестирование): 1 час
+- **Stage 1** (Documentation): 1.5 hours
+- **Stage 2** (Validator): 2.5 hours  
+- **Stage 3** (GitHub Action): 1 hour
+- **Stage 4** (Integration): 0.5 hours
+- **Stage 5** (Testing): 1 hour
 
-**Общее время**: ~6 часов (соответствует оценке задания)
+**Total time**: ~6 hours (matches assignment estimate)
 
-## Порядок выполнения
+## Execution Order
 
-1. Начать с документации Docker архитектуры для понимания системы
-2. Реализовать core валидатор с CLI интерфейсом
-3. Создать и протестировать GitHub Action локально
-4. Интегрировать все компоненты и обновить документацию
-5. Создать публичный репозиторий и демонстрационные PR
+1. Start with Docker architecture documentation for system understanding
+2. Implement core validator with CLI interface
+3. Create and test GitHub Action locally
+4. Integrate all components and update documentation
+5. Create public repository and demonstration PRs
 
-Этот план обеспечивает систематический подход к решению задачи с четкими deliverables и критериями успеха на каждом этапе.
+This plan ensures a systematic approach to solving the task with clear deliverables and success criteria at each stage.
